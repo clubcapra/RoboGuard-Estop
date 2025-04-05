@@ -4,8 +4,8 @@
   <name>roboguard_estop_package</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
-  <maintainer email="yanhaddar@gmail.com">dusty</maintainer>
-  <license>Apache-2.0</license>
+  <maintainer email="capra@ens.etsmtl.ca">Club Capra ETS</maintainer>
+  <license>MIT/license>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

@@ -13,10 +13,10 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='dusty',
-    maintainer_email='yanhaddar@gmail.com',
+    maintainer='Club Capra ETS',
+    maintainer_email='capra@ens.etsmtl.ca',
     description='TODO: Package description',
-    license='Apache-2.0',
+    license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
