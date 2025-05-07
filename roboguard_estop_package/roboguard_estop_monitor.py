@@ -1,33 +1,57 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Bool
-import RPi.GPIO as GPIO
 import time
+import lgpio
 
 class EstopMonitor(Node):
     def __init__(self):
-        super().__init__('estop_monitor')
+        super().__init__('roboguard_estop_monitor')
         self.sub = self.create_subscription(Bool, '/heartbeat', self.heartbeat_callback, 10)
-        self.last_heartbeat_time = time.monotonic()
+        self.last_heartbeat_time = None  # Will be set on first heartbeat
         self.timeout = 0.15  # 150 ms
-        self.pin = 17
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.pin, GPIO.OUT)
-        self.timer = self.create_timer(0.05, self.check_timeout)  # check every 50 ms
+        self.pin = 27 # E-Stop pin TODO:PUT THE CORRECT PIN NUMBER
+        self.gpio_state = None  # Track current GPIO state to avoid spamming output
+
+        self.h = lgpio.gpiochip_open(0)
+        lgpio.gpio_claim_output(self.h, self.pin)
+
+        # Set GPIO HIGH on startup since no heartbeat has been received yet
+        self.set_gpio_state(1)
+
+        self.timer = self.create_timer(0.05, self.check_timeout)
 
     def heartbeat_callback(self, msg):
         self.last_heartbeat_time = time.monotonic()
+        self.get_logger().info("Heartbeat received")
 
     def check_timeout(self):
-        if time.monotonic() - self.last_heartbeat_time > self.timeout:
-            GPIO.output(self.pin, GPIO.HIGH)
+        current_time = time.monotonic()
+        if self.last_heartbeat_time is None or (current_time - self.last_heartbeat_time > self.timeout):
+            self.set_gpio_state(1)  # Triggered
         else:
-            GPIO.output(self.pin, GPIO.LOW)
+            self.set_gpio_state(0)  # Healthy
+
+    def set_gpio_state(self, value):
+        if self.gpio_state != value:
+            lgpio.gpio_write(self.h, self.pin, value)
+            state_str = "HIGH (TRIGGERED)" if value == 1 else "LOW (OK)"
+            self.get_logger().info(f"GPIO {self.pin} set to {state_str}")
+            self.gpio_state = value
+
+    def cleanup(self):
+        self.set_gpio_state(0)
+        lgpio.gpiochip_close(self.h)
+
+    def __del__(self):
+        self.cleanup()
 
 def main(args=None):
     rclpy.init(args=args)
     node = EstopMonitor()
-    rclpy.spin(node)
-    node.destroy_node()
-    GPIO.cleanup()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    finally:
+        node.cleanup()
+        node.destroy_node()
+        rclpy.shutdown()
