@@ -16,6 +16,7 @@ class PowerSupplyToggler(Node):
         super().__init__('roboguard_powersupply_toggler')
         self.pin = 31  # GPIO pin used to control E-Stop state
         self.gpio_state = None  # Track current GPIO state
+        topicname = '/powersupply_mode'  # Topic to subscribe to
 
         # Open GPIO chip and claim output pin
         self.h = lgpio.gpiochip_open(0)
@@ -27,12 +28,12 @@ class PowerSupplyToggler(Node):
         # Subscribe to the /powersupply_mode topic
         self.sub = self.create_subscription(
             Bool,
-            '/powersupply_mode',
+            topicname,
             self.powersupply_callback,
             10
         )
 
-        self.get_logger().info("PowerSupplyToggler node started, listening on /powersupply_mode")
+        self.get_logger().info("PowerSupplyToggler node started, listening on" + topicname)
 
     def powersupply_callback(self, msg: Bool):
         value = 1 if msg.data else 0
