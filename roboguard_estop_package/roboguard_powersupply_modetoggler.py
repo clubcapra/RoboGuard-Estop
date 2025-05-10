@@ -6,7 +6,7 @@ import lgpio
 
 class PowerSupplyToggler(Node):
     """
-    This node monitors messages on the /powersupply_mode topic and toggles a GPIO pin accordingly.
+    This node monitors messages on the topic and toggles a GPIO pin accordingly.
 
     - If it receives `True`, it sets the GPIO pin HIGH (E-Stop TRIGGERED).
     - If it receives `False`, it sets the GPIO pin LOW (E-Stop OK).
@@ -25,7 +25,7 @@ class PowerSupplyToggler(Node):
         # Set default state to LOW (safe startup state)
         self.set_gpio_state(0)
 
-        # Subscribe to the /powersupply_mode topic
+        # Subscribe to the topic
         self.sub = self.create_subscription(
             Bool,
             topicname,
