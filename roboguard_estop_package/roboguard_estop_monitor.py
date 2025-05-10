@@ -10,7 +10,7 @@ class EstopMonitor(Node):
         self.sub = self.create_subscription(Bool, '/heartbeat', self.heartbeat_callback, 10) # TODO: PUT THE CORRECT TOPIC NAME
         self.last_heartbeat_time = None  # Will be set on first heartbeat
         self.timeout = 0.15  # 150 ms, figure this should be enough
-        self.pin = 27 # E-Stop pin TODO:PUT THE CORRECT PIN NUMBER
+        self.pin = 29 # E-Stop pin
         self.gpio_state = None  # Track current GPIO state to avoid spamming output
 
         self.h = lgpio.gpiochip_open(0)
