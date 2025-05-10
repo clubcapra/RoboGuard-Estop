@@ -4,6 +4,12 @@ from std_msgs.msg import Bool
 import time
 import lgpio
 
+# This node monitors the heartbeat of the system and triggers an E-Stop if no heartbeat is received within a specified timeout period.
+# It uses GPIO pin 29 to control the E-Stop state.
+# The heartbeat topic is expected to be published by another node in the system.
+# The E-Stop is triggered (GPIO HIGH) if no heartbeat is received within the timeout period.
+# The GPIO pin is set to LOW (OK) when a heartbeat is received.
+
 class EstopMonitor(Node):
     def __init__(self):
         super().__init__('roboguard_estop_monitor')
