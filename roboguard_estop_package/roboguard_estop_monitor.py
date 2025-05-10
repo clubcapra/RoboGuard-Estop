@@ -7,9 +7,9 @@ import lgpio
 class EstopMonitor(Node):
     def __init__(self):
         super().__init__('roboguard_estop_monitor')
-        self.sub = self.create_subscription(Bool, '/heartbeat', self.heartbeat_callback, 10)
+        self.sub = self.create_subscription(Bool, '/heartbeat', self.heartbeat_callback, 10) # TODO: PUT THE CORRECT TOPIC NAME
         self.last_heartbeat_time = None  # Will be set on first heartbeat
-        self.timeout = 0.15  # 150 ms
+        self.timeout = 0.15  # 150 ms, figure this should be enough
         self.pin = 27 # E-Stop pin TODO:PUT THE CORRECT PIN NUMBER
         self.gpio_state = None  # Track current GPIO state to avoid spamming output
 
