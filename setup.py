@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'roboguard_estop_monitor = roboguard_estop_package.roboguard_estop_monitor:main'
+            'main_estop_trigger = roboguard_estop_package.main_estop_trigger:main'
         ],
     },
 )
