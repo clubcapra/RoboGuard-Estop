@@ -10,17 +10,20 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name + '/launch', ['launch/estop_launch.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='Club Capra ETS',
     maintainer_email='capra@ens.etsmtl.ca',
-    description='TODO: Package description',
+    description='E-stop management package for RoboGuard (Capra ETS)',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'main_estop_trigger = roboguard_estop_package.main_estop_trigger:main'
+            'estop_manager = roboguard_estop_package.estop_manager:main',
+            'estop_hardware_monitor = roboguard_estop_package.estop_hardware_monitor:main',
+            'estop_heartbeat_unifier = roboguard_estop_package.estop_heartbeat_unifier:main',
         ],
     },
 )
