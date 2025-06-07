@@ -24,6 +24,7 @@ setup(
             'estop_manager = roboguard_estop_package.estop_manager:main',
             'estop_hardware_monitor = roboguard_estop_package.estop_hardware_monitor:main',
             'estop_heartbeat_unifier = roboguard_estop_package.estop_heartbeat_unifier:main',
+            'roboguard_powersupply_toggler = roboguard_estop_package.roboguard_powersupply_toggler:main',
         ],
     },
 )

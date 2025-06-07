@@ -18,4 +18,9 @@ def generate_launch_description():
             executable='estop_manager',
             name='estop_manager'
         ),
+        Node(
+            package='roboguard_estop_package',
+            executable='roboguard_powersupply_toggler',
+            name='roboguard_powersupply_toggler'
+        ),
     ])
