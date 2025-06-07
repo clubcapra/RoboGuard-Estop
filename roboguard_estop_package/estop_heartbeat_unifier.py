@@ -1,47 +1,65 @@
-estop_heartbeat_unifier.py
-# This node listens to controller, UI, and hardware heartbeat estops.
-# It outputs a unified heartbeat signal: True if ANY estop heartbeat is triggered or times out.
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Bool
 
 class EstopHeartbeatUnifier(Node):
     def __init__(self):
         super().__init__('estop_heartbeat_unifier')
 
-        self.timeout_ms = self.declare_parameter('timeout_ms', 200).get_parameter_value().integer_value
-        self.heartbeat_freq = self.declare_parameter('heartbeat_freq', 10).get_parameter_value().integer_value
+        self.timeout_ms = 150  # Max time between valid messages
+        self.timer_period = 0.01  # 10 ms publishing frequency
+        self.output_topic = '/estop_general_h'
 
-        self.last_ctrl = self.get_clock().now()
-        self.last_ui = self.get_clock().now()
-        self.last_hw = self.get_clock().now()
+        self.topics = {
+            '/estop_controller_h': {'last_value': None, 'last_time': self.get_clock().now()},
+            '/estop_ui_h':         {'last_value': None, 'last_time': self.get_clock().now()},
+            '/estop_hardware_h':   {'last_value': None, 'last_time': self.get_clock().now()}
+        }
 
-        self.ctrl_val = False
-        self.ui_val = False
-        self.hw_val = False
+        # Subscriptions
+        for topic in self.topics.keys():
+            self.create_subscription(Bool, topic, self._make_callback(topic), 10)
 
-        self.create_subscription(Bool, '/estop_controller_h', self.cb_ctrl, 10)
-        self.create_subscription(Bool, '/estop_ui_h', self.cb_ui, 10)
-        self.create_subscription(Bool, '/estop_hardware_h', self.cb_hw, 10)
+        # Publisher
+        self.pub = self.create_publisher(Bool, self.output_topic, 10)
 
-        self.pub = self.create_publisher(Bool, '/estop_general_h', 10)
-        self.timer = self.create_timer(1.0 / self.heartbeat_freq, self.check)
+        # Timer to check and publish
+        self.timer = self.create_timer(self.timer_period, self.check_and_publish)
 
-    def cb_ctrl(self, msg):
-        self.ctrl_val = msg.data
-        self.last_ctrl = self.get_clock().now()
+    def _make_callback(self, topic_name):
+        def callback(msg):
+            try:
+                if isinstance(msg.data, bool):
+                    self.topics[topic_name]['last_value'] = msg.data
+                    self.topics[topic_name]['last_time'] = self.get_clock().now()
+            except Exception as e:
+                self.get_logger().warn(f"Exception in {topic_name} callback: {e}")
+        return callback
 
-    def cb_ui(self, msg):
-        self.ui_val = msg.data
-        self.last_ui = self.get_clock().now()
-
-    def cb_hw(self, msg):
-        self.hw_val = msg.data
-        self.last_hw = self.get_clock().now()
-
-    def check(self):
+    def check_and_publish(self):
         now = self.get_clock().now()
+        estop_required = False
 
-        timeout_ctrl = (now - self.last_ctrl).nanoseconds / 1e6 > self.timeout_ms
-        timeout_ui = (now - self.last_ui).nanoseconds / 1e6 > self.timeout_ms
-        timeout_hw = (now - self.last_hw).nanoseconds / 1e6 > self.timeout_ms
+        for topic, state in self.topics.items():
+            time_since_last = (now - state['last_time']).nanoseconds / 1e6  # ms
+            if (
+                time_since_last > self.timeout_ms or
+                state['last_value'] is None or
+                state['last_value'] != False
+            ):
+                estop_required = True
+                break
 
-        triggered = timeout_ctrl or timeout_ui or timeout_hw or self.ctrl_val or self.ui_val or self.hw_val
-        self.pub.publish(Bool(data=triggered))
+        msg = Bool()
+        msg.data = estop_required
+        self.pub.publish(msg)
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = EstopHeartbeatUnifier()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

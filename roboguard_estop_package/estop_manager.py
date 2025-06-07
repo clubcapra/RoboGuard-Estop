@@ -1,57 +1,71 @@
-# estop_manager.py
-# This node triggers a GPIO estop line on Raspberry Pi (or equivalent)
-# based on /estop_general_h heartbeat status and /estop_manual_s signal.
-
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Bool
 import lgpio
 
 class EstopManager(Node):
     def __init__(self):
         super().__init__('estop_manager')
 
-        self.timeout_ms = self.declare_parameter('timeout_ms', 200).get_parameter_value().integer_value
-        self.heartbeat_freq = self.declare_parameter('heartbeat_freq', 10).get_parameter_value().integer_value
-        self.gpio_pin = self.declare_parameter('gpio_pin', 26).get_parameter_value().integer_value
+        self.timeout_ms = 150
+        self.pin = 29  # GPIO pin to control estop circuit
+        self.gpio_state = None  # Track last GPIO state
+        self.last_valid_msg_time = self.get_clock().now()
+        self.general_estop_topic = '/estop_general_h'
 
-        self.last_general = self.get_clock().now()
-        self.general_val = False
-        self.manual_override = None
-
-        self.create_subscription(Bool, '/estop_general_h', self.cb_general, 10)
-        self.create_subscription(Bool, '/estop_manual_s', self.cb_manual, 10)
-
+        # Setup GPIO
         self.h = lgpio.gpiochip_open(0)
-        lgpio.gpio_claim_output(self.h, self.gpio_pin)
+        lgpio.gpio_claim_output(self.h, self.pin)
+        self.set_gpio_state(False)  # Default to OK state on startup (LOW)
 
-        self.gpio_state = None
-        self.set_gpio(True)  # default to estop ON
+        # Subscribe to estop heartbeat
+        self.create_subscription(Bool, self.general_estop_topic, self.estop_callback, 10)
 
-        self.timer = self.create_timer(1.0 / self.heartbeat_freq, self.check)
+        # Start timer to check for heartbeat timeout (50ms is reasonable for a 150ms timeout)
+        self.timer = self.create_timer(0.05, self.check_timeout)  # 10ms
 
-    def cb_general(self, msg):
-        self.general_val = msg.data
-        self.last_general = self.get_clock().now()
+    def estop_callback(self, msg):
+        try:
+            if isinstance(msg.data, bool):
+                self.last_valid_msg_time = self.get_clock().now()
+                if msg.data:  # true means estop is triggered
+                    self.set_gpio_state(True)
+                else:
+                    self.set_gpio_state(False)
+            else:
+                self.get_logger().warn("Non-boolean message received, ignoring")
+                # no state change; timeout will handle failure
+        except Exception as e:
+            self.get_logger().error(f"Exception in estop_callback: {e}")
+            # ignore and let timeout trigger estop
 
-    def cb_manual(self, msg):
-        if msg.data:
-            self.set_gpio(True)
-            self.manual_override = True
-        elif not msg.data and not self.general_val:
-            self.set_gpio(False)
-            self.manual_override = False
-
-    def check(self):
+    def check_timeout(self):
         now = self.get_clock().now()
-        timeout = (now - self.last_general).nanoseconds / 1e6 > self.timeout_ms
+        elapsed = (now - self.last_valid_msg_time).nanoseconds / 1e6  # in ms
+        if elapsed > self.timeout_ms:
+            self.set_gpio_state(True)  # Timeout: trigger estop
 
-        if not self.manual_override:
-            self.set_gpio(self.general_val or timeout)
-
-    def set_gpio(self, engage):
-        value = 1 if engage else 0
+    def set_gpio_state(self, triggered):
+        value = 1 if triggered else 0
         if self.gpio_state != value:
-            lgpio.gpio_write(self.h, self.gpio_pin, value)
+            lgpio.gpio_write(self.h, self.pin, value)
             self.gpio_state = value
-            self.get_logger().info(f"GPIO {self.gpio_pin} set to {'HIGH (TRIGGERED)' if engage else 'LOW (OK)'}")
+            state_str = "HIGH (TRIGGERED)" if value else "LOW (OK)"
+            self.get_logger().info(f"GPIO {self.pin} set to {state_str}")
+
+    def cleanup(self):
+        self.set_gpio_state(False)  # Set GPIO LOW on cleanup
+        lgpio.gpiochip_close(self.h)
 
     def __del__(self):
-        lgpio.gpiochip_close(self.h)
+        self.cleanup()
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = EstopManager()
+    try:
+        rclpy.spin(node)
+    finally:
+        node.cleanup()
+        node.destroy_node()
+        rclpy.shutdown()

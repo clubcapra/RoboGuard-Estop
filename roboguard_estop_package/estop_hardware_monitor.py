@@ -7,53 +7,94 @@
 
 # It does not validate the estop status (true/false); it only cares that a signal is received.
 # This is because if a message is published, it means the hardware is functioning correctly and should engage it's own estop.
-
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Bool
-import time
 
 class EstopHardwareMonitor(Node):
     def __init__(self):
         super().__init__('estop_hardware_monitor')
 
-        self.timeout_ms = 400  # Acceptable timeout since the heartbeats are published at 15.15Hz
+        self.timeout_ms = 400  # Heartbeat timeout in milliseconds (should publish every 66ms)
+        self.timer_period = 0.01  # 10ms = 100Hz publishing loop
 
-        self.stm32_status_topic = '/estop_stm32_status' # Topic where the status of the STM32 estop is published
-        self.last_stm32_status = False
+        # Initialize last message timestamps
+        self.last_stm32_time = None
+        self.last_mushroom_time = None
 
-        self.mushroom_status_topic = '/estop_mushroom_status' # Topic where the status of the mushroom estop is published
-        self.last_mushroom_status = False
+        # Topic names
+        self.stm32_status_topic = '/estop_stm32_status'
+        self.mushroom_status_topic = '/estop_mushroom_status'
+        self.output_topic = '/estop_hardware_h'
 
-        self.hadware_estop_topic = '/estop_hardware_h' # Topic where this node will publish the general hardware estop heartbeat
-        self.timer_period = 0.1 # Timer period to publish heartbeat (0.1 = 10Hz, same as the controller and UI heartbeat)
+        # Subscriptions
+        self.create_subscription(Bool, self.stm32_status_topic, self.stm32_callback, 10)
+        self.create_subscription(Bool, self.mushroom_status_topic, self.mushroom_callback, 10)
 
-        self.stm32_sub = self.create_subscription(Bool, self.stm32_status_topic, self.stm32_callback)
-        self.mushroom_sub = self.create_subscription(Bool, self.mushroom_status_topic, self.mushroom_callback)
-        self.publisher_ = self.create_publisher(Bool, self.hadware_estop_topic, 10)
+        # Publisher
+        self.pub = self.create_publisher(Bool, self.output_topic, 10)
 
+        # Current estop state
+        self.estop_ok = False  # Start conservative
+        self.last_published_state = None  # To track transitions
 
-        self.last_stm32_time = self.get_clock().now()
-        self.last_mushroom_time = self.get_clock().now()
+        # Timer to check heartbeats and publish
+        self.timer = self.create_timer(self.timer_period, self.check_timeout)
 
-        self.create_subscription(Bool, '/estop_stm32_status', self.stm32_cb, 10)
-        self.create_subscription(Bool, '/estop_mushroom_status', self.mushroom_cb, 10)
-        self.pub = self.create_publisher(Bool, '/estop_hardware_h', 10)
+    def stm32_callback(self, msg):
+        try:
+            if isinstance(msg.data, bool):
+                self.last_stm32_time = self.get_clock().now()
+            else:
+                self.get_logger().warn("Received non-boolean STM32 estop message.")
+        except Exception as e:
+            self.get_logger().error(f"Exception in STM32 callback: {e}")
 
-        timer_period = 1.0 / self.heartbeat_freq
-        self.timer = self.create_timer(timer_period, self.check_timeout)
-
-    def stm32_cb(self, msg):
-        self.last_stm32_time = self.get_clock().now()
-
-    def mushroom_cb(self, msg):
-        self.last_mushroom_time = self.get_clock().now()
+    def mushroom_callback(self, msg):
+        try:
+            if isinstance(msg.data, bool):
+                self.last_mushroom_time = self.get_clock().now()
+            else:
+                self.get_logger().warn("Received non-boolean mushroom estop message.")
+        except Exception as e:
+            self.get_logger().error(f"Exception in mushroom callback: {e}")
 
     def check_timeout(self):
         now = self.get_clock().now()
-        delta_stm32 = (now - self.last_stm32_time).nanoseconds / 1e6
-        delta_mushroom = (now - self.last_mushroom_time).nanoseconds / 1e6
+        try:
+            # Check deltas
+            stm32_valid = self.last_stm32_time is not None and \
+                (now - self.last_stm32_time).nanoseconds / 1e6 <= self.timeout_ms
+            mushroom_valid = self.last_mushroom_time is not None and \
+                (now - self.last_mushroom_time).nanoseconds / 1e6 <= self.timeout_ms
 
-        out = Bool()
-        out.data = delta_stm32 > self.timeout_ms or delta_mushroom > self.timeout_ms
-        self.pub.publish(out)
+            # Determine if we're OK
+            new_estop_ok = stm32_valid and mushroom_valid
+
+            # Only log transitions (GOOD → BAD, BAD → GOOD)
+            if new_estop_ok != self.last_published_state:
+                if new_estop_ok:
+                    self.get_logger().info("E-STOP: Hardware heartbeat back up")
+                else:
+                    self.get_logger().warn("E-STOP: Hardware heartbeat lost")
+
+                self.last_published_state = new_estop_ok
+
+            # Publish result
+            msg = Bool()
+            # invert (false = estop is NOT ACTIVE, true = estop is ACTIVE)
+            msg.data = not new_estop_ok # hardcode this as true if both heartbeats are not implemented
+            self.pub.publish(msg)
+
+        except Exception as e:
+            self.get_logger().error(f"Exception in heartbeat check: {e}")
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = EstopHardwareMonitor()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
