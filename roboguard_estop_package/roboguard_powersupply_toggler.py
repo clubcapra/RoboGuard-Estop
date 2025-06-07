@@ -16,7 +16,7 @@ class PowerSupplyToggler(Node):
         self.pin = 31  # GPIO pin used to control power supply mode
         self.gpio_state = None  # Track current GPIO state
         self.initialized = False  # Indicates whether the first message was received
-        topicname = '/powersupply_mode'  # Topic to subscribe to
+        topicname = '/powersupply_mode_s'  # Topic to subscribe to
 
         self.h = None
 
