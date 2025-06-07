@@ -1,4 +1,4 @@
-This ROS2 package contains two nodes.
+THIS README IS DEPRECATED
 
 # 1. EStop Monitor
 monitors the `/heartbeat` topic and controls a GPIO pin on Roboguard's raspberry pi to raise the E-stop.
